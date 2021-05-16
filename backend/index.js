@@ -1,7 +1,8 @@
 const express = require('express');
-const MongoClient = require('mongodb').MongoClient;
 const assert = require('assert');
 const bodyPaser = require('body-parser')
+const MongoClient = require('mongodb').MongoClient;
+const Nlp = require('./Nlp');
 
 const app = express();
 let db = null;
@@ -24,7 +25,15 @@ MongoClient.connect(url, { useNewUrlParser: true, useUnifiedTopology: true }, (_
 app.listen(3000)
 console.log('Servidor rodando na porta 3000.')
 
-//routes
+//routes post
+
+app.post('/question', urlencondedPaser, async (req, res) => {
+    let objJSON = await auxQuestion(req);
+    questionData(objJSON, (result) => {
+        res.send(result);
+    })
+})
+
 app.post('/insert', urlencondedPaser, async (req, res) => {
     let objJSON = await mountInsertObject(req);
     insertData(objJSON, (result) => {
@@ -55,6 +64,28 @@ app.post('/find', urlencondedPaser, async (req, res) => {
 })
 
 //metodos
+const questionData = async (objJSON, callback) => {
+    const collection = db.collection(tableName);
+    collection.find(objJSON).toArray((_, result) => {
+        assert.equal(null, _);
+        if (result.length <= 0) {
+
+            let objFind = {}
+            objFind.code_user = objJSON.code_user
+            objJSON.code_before > 0 ? objFind.code_relation = Number(objJSON.code_before) : null
+
+            collection.find(objFind).toArray(async (_, result) => {
+                assert.equal(null, _);
+                let nlp = new Nlp();
+                let possibleResult = await nlp.NatualLanguageProcess(objJSON.input, result);
+                callback(possibleResult);
+            })
+        } else {
+            callback(result)
+        }
+    })
+}
+
 const insertData = (objJSON, callback) => {
     const collection = db.collection(tableName);
     collection.insertOne(objJSON, (_, result) => {
@@ -88,12 +119,23 @@ const findData = (objJSON, callback) => {
     });
 }
 
-//aux
+//aux get data
+async function auxQuestion(req) {
+    let objJSON = {};
+    req.body.code_user ? objJSON.code_user = Number(req.body.code_user) : objJSON.code_user = 0;
+    req.body.code_session ? objJSON.code_session = Number(req.body.code_session) : objJSON.code_session = 0;
+    req.body.code_before ? objJSON.code_before = Number(req.body.code_before) : objJSON.code_before = 0;
+    req.body.input ? objJSON.input = req.body.input : objJSON.input = '';
+    return objJSON;
+}
+
+//aux post
 async function mountInsertObject(req) {
     let objJSON = {};
     req.body.code_user ? objJSON.code_user = req.body.code_user : objJSON.code_user = 0;
     req.body.code_session ? objJSON.code_session = req.body.code_session : objJSON.code_session = 0;
     req.body.code_current ? objJSON.code_current = req.body.code_current : objJSON.code_current = await cod();
+    req.body.code_relation ? objJSON.code_relation = req.body.code_relation : objJSON.code_relation = 0;
     req.body.code_before ? objJSON.code_before = req.body.code_before : objJSON.code_before = 0;
     req.body.input ? objJSON.input = req.body.input : objJSON.input = '';
     req.body.output ? objJSON.output = req.body.output : objJSON.output = 'Ops! Mas não entendi sua sua pergunta';
@@ -105,6 +147,7 @@ async function mountJsonObjectUpdateDelete(req) {
     req.body.code_user ? objJSON.code_user = req.body.code_user : null;
     req.body.code_current ? objJSON.code_current = req.body.code_current : null;
     req.body.code_session ? objJSON.code_session = req.body.code_session : null;
+    req.body.code_relation ? objJSON.code_relation = req.body.code_relation : null;
     req.body.code_before ? objJSON.code_before = req.body.code_before : null;
     req.body.input ? objJSON.input = req.body.input : null;
     req.body.output ? objJSON.output = req.body.output : null;
